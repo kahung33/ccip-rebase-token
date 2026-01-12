@@ -8,7 +8,6 @@ import {RebaseToken} from "../src/RebaseToken.sol";
 import {Vault} from "../src/Vault.sol";
 import {IRebaseToken} from "../src/interfaces/IRebaseToken.sol";
 
-
 contract RebaseTokenTest is Test {
     RebaseToken private rebaseToken;
     Vault private vault;
@@ -127,12 +126,12 @@ contract RebaseTokenTest is Test {
     function testCannotCallMintAndBurn() public {
         vm.prank(user);
         vm.expectPartialRevert(IAccessControl.AccessControlUnauthorizedAccount.selector);
-        rebaseToken.mint(user,100);
+        rebaseToken.mint(user, 100, rebaseToken.getInterestRate());
         vm.expectPartialRevert(IAccessControl.AccessControlUnauthorizedAccount.selector);
-        rebaseToken.burn(user,100);
+        rebaseToken.burn(user, 100);
     }
 
-    function testGetPrincipleAmount(uint256 amount) public{
+    function testGetPrincipleAmount(uint256 amount) public {
         amount = bound(amount, 1e5, type(uint96).max);
         vm.deal(user, amount);
         vm.prank(user);
@@ -156,4 +155,3 @@ contract RebaseTokenTest is Test {
         vm.assertEq(rebaseToken.getInterestRate(), initialInterestRate);
     }
 }
-
