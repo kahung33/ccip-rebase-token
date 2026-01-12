@@ -58,12 +58,21 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
      */
     function setInterestRate(uint256 _newInterestRate) external onlyOwner {
         // Set the interest rate
-        if (_newInterestRate < s_interestRate) {
+        if (_newInterestRate >= s_interestRate) {
             revert RebaseToken__InterestRateCanOnlyDecrease(s_interestRate, _newInterestRate);
         }
         s_interestRate = _newInterestRate;
         emit InterestRateSet(_newInterestRate);
     }
+
+    /**
+     * @notice Gets the principle balance of the user. This is the balance of tokens that have been minted to the user, not including any interest that has accrued since the last interacted with the contract
+     * @param _user The user to get the principle balance of
+     */
+    function principleBalanceOf(address _user) external view returns (uint256) {
+        return super.balanceOf(_user);
+    }
+
     /**
      * @notice Mints rebase tokens to the user when they deposit into the vault
      * @param _to The address to mint the rebase tokens to
@@ -99,6 +108,43 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
         // get the current principal balance of the user (ie number of tokens that have actually been minted to the user)
         // multiply the pricipal blance by the interest that has accumulated in the time since the balance
         return super.balanceOf(_user) * _calculateUserAccumulatedInterestSinceLastUpdate(_user) / PRECISION_FACTOR;
+    }
+
+    /**
+     * @notice Transfers rebase tokens from the user to another user
+     * @param _recipient The address to transfer the rebase tokens to
+     * @param _amount The amount of rebase tokens to transfer
+     * @return True if the transfer was successful, false otherwise
+     */
+    function transfer(address _recipient, uint256 _amount) public override returns (bool) {
+        _mintAccuredInterest(msg.sender);
+        _mintAccuredInterest(_recipient);
+        if (_amount == type(uint256).max) {
+            _amount = balanceOf(msg.sender);
+        }
+        if (balanceOf(_recipient) == 0) {
+            s_userInterestRate[_recipient] = s_userInterestRate[msg.sender];
+        }
+        return super.transfer(_recipient, _amount);
+    }
+
+    /**
+     * @notice Transfers rebase tokens from the user to another user
+     * @param _sender The address to transfer the rebase tokens from
+     * @param _recipient The address to transfer the rebase tokens to
+     * @param _amount The amount of rebase tokens to transfer
+     * @return True if the transfer was successful, false otherwise
+     */
+    function transferFrom(address _sender, address _recipient, uint256 _amount) public override returns (bool) {
+        _mintAccuredInterest(_sender);
+        _mintAccuredInterest(_recipient);
+        if (_amount == type(uint256).max) {
+            _amount = balanceOf(_sender);
+        }
+        if (balanceOf(_recipient) == 0) {
+            s_userInterestRate[_recipient] = s_userInterestRate[_sender];
+        }
+        return super.transferFrom(_sender, _recipient, _amount);
     }
 
     /**
@@ -141,11 +187,20 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     }
 
     /**
+     * @notice Gets the interest rate is currently set for the contract. Any future depositors will receive this interest rate
+     * @return The interest rate for the user
+     */
+    function getInterestRate() external view returns (uint256) {
+        return s_interestRate;
+    }
+
+    /**
      * @notice Gets the interest rate for the user
      * @param _user The user to get the interest rate for
      * @return The interest rate for the user
      */
-    function getUserIntestRate(address _user) external view returns (uint256) {
+    function getUserInterestRate(address _user) external view returns (uint256) {
         return s_userInterestRate[_user];
     }
+
 }
