@@ -2,13 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
-
 import {CCIPLocalSimulatorFork} from "@chainlink-local/src/ccip/CCIPLocalSimulatorFork.sol";
-
 import {IERC20} from "@ccip/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
 import {RegistryModuleOwnerCustom} from "@ccip/contracts/src/v0.8/ccip/tokenAdminRegistry/RegistryModuleOwnerCustom.sol";
 import {TokenAdminRegistry} from "@ccip/contracts/src/v0.8/ccip/tokenAdminRegistry/TokenAdminRegistry.sol";
-
+import {Register} from "@chainlink-local/src/ccip/Register.sol";
 import {RebaseToken} from "../src/RebaseToken.sol";
 import {RebaseTokenPool} from "../src/RebaseTokenPool.sol";
 import {Vault} from "../src/Vault.sol";
@@ -21,6 +19,9 @@ contract CrossChainTest is Test {
     uint256 arbSepoliaFork;
 
     Vault vault;
+
+    RebaseToken sepoliaToken;
+    RebaseToken arbSepoliaToken;
 
     RebaseTokenPool sepoliaPool;
     RebaseTokenPool arbSepoliaPool;
@@ -43,18 +44,21 @@ contract CrossChainTest is Test {
         sepoliaToken = new RebaseToken();
         vault = new Vault(IRebaseToken(address(sepoliaToken)));
         sepoliaPool = new RebaseTokenPool(
-            IERC20(address(sepoliaToken)), 
-            new address[](0), 
-            sepoliaNetworkDatails.rmnProxyAddress, 
-            sepoliaNetworkDatails.routerAddress
+            IERC20(address(sepoliaToken)),
+            new address[](0),
+            sepoliaNetworkDetails.rmnProxyAddress,
+            sepoliaNetworkDetails.routerAddress
         );
         sepoliaToken.grantMintAndBurnRole(address(sepoliaPool));
         sepoliaToken.grantMintAndBurnRole(address(vault));
-        RegistryModuleOwnerCustom(sepoliaNetworkDatails.registryModuleOwnerCustomeAddress).registerAdminViaOwner(address(sepoliaToken));
-        TokenAdminRegistry(sepoliaNetworkDatails.tokenAdminRegistryAddress).acceptAdminRole(address(sepoliaToken));
-        TokenAdminRegistry(sepoliaNetworkDatails.tokenAdminRegistryAddress).setPool(address(sepoliaToken), address(sepoliaPool));
+        RegistryModuleOwnerCustom(sepoliaNetworkDetails.registryModuleOwnerCustomAddress).registerAdminViaOwner(
+            address(sepoliaToken)
+        );
+        TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(address(sepoliaToken));
+        TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
+            address(sepoliaToken), address(sepoliaPool)
+        );
         vm.stopPrank();
-
 
         // 2. Deploy and configure on Arbitrum Sepolia
         vm.selectFork(arbSepoliaFork);
@@ -62,15 +66,19 @@ contract CrossChainTest is Test {
         vm.startPrank(owner);
         arbSepoliaToken = new RebaseToken();
         arbSepoliaPool = new RebaseTokenPool(
-            IERC20(address(sepoliaToken)), 
-            new address[](0), 
-            arbSepoliaNetworkDetails.rmnProxyAddress, 
+            IERC20(address(sepoliaToken)),
+            new address[](0),
+            arbSepoliaNetworkDetails.rmnProxyAddress,
             arbSepoliaNetworkDetails.routerAddress
         );
         arbSepoliaToken.grantMintAndBurnRole(address(arbSepoliaPool));
-        RegistryModuleOwnerCustom(arbSepoliaNetworkDetails.registryModuleOwnerCustomeAddress).registerAdminViaOwner(address(arbSepoliaToken));
+        RegistryModuleOwnerCustom(arbSepoliaNetworkDetails.registryModuleOwnerCustomAddress).registerAdminViaOwner(
+            address(arbSepoliaToken)
+        );
         TokenAdminRegistry(arbSepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(address(arbSepoliaToken));
-        TokenAdminRegistry(sepoliaNetworkDatails.tokenAdminRegistryAddress).setPool(address(arbSepoliaToken), address(arbSepoliaPool));
+        TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
+            address(arbSepoliaToken), address(arbSepoliaPool)
+        );
         vm.stopPrank();
     }
 }
