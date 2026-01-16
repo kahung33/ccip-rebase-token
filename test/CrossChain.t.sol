@@ -22,6 +22,7 @@ import {IRebaseToken} from "../src/interfaces/IRebaseToken.sol";
 contract CrossChainTest is Test {
     address owner = makeAddr("owner");
     address user = makeAddr("user");
+    uint256 SEND_VALUE = 1e5;
     uint256 sepoliaFork;
     uint256 arbSepoliaFork;
 
@@ -82,21 +83,13 @@ contract CrossChainTest is Test {
         TokenAdminRegistry(arbSepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(address(arbSepoliaToken));
         TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress)
             .setPool(address(arbSepoliaToken), address(arbSepoliaPool));
-        configureTokenPool(
-            sepoliaFork,
-            sepoliaPool,
-            arbSepoliaPool,
-            IRebaseToken(address(arbSepoliaToken)),
-            arbSepoliaNetworkDetails
-        );
-        configureTokenPool(
-            arbSepoliaFork,
-            arbSepoliaPool,
-            sepoliaPool,
-            IRebaseToken(address(sepoliaToken)),
-            sepoliaNetworkDetails
-        );
         vm.stopPrank();
+        configureTokenPool(
+            sepoliaFork, sepoliaPool, arbSepoliaPool, IRebaseToken(address(arbSepoliaToken)), arbSepoliaNetworkDetails
+        );
+        configureTokenPool(
+            arbSepoliaFork, arbSepoliaPool, sepoliaPool, IRebaseToken(address(sepoliaToken)), sepoliaNetworkDetails
+        );
     }
 
     function configureTokenPool(
@@ -134,20 +127,18 @@ contract CrossChainTest is Test {
         RebaseToken remoteToken
     ) public {
         vm.selectFork(localFork);
-        Client.EVMTokenAmount [] memory tokenAmounts = new Client.EVMTokenAmount[](1);
-        tokenAmounts[0] = Client.EVMTokenAmount({
-            token: address(localToken),
-            amount: amountToBridge
-        });
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({token: address(localToken), amount: amountToBridge});
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver : abi.encode(user),
-            data : "",
+            receiver: abi.encode(user),
+            data: "",
             tokenAmounts: tokenAmounts,
             feeToken: localNetworkDetails.linkAddress,
-            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: 0}))
-            });
+            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV2({gasLimit: 100_000, allowOutOfOrderExecution: false}))
+        });
 
-        uint256 fee = IRouterClient(localNetworkDetails.routerAddress).getFee(remoteNetworkDetails.chainSelector, message);
+        uint256 fee =
+            IRouterClient(localNetworkDetails.routerAddress).getFee(remoteNetworkDetails.chainSelector, message);
         ccipLocalSimulatorFork.requestLinkFromFaucet(user, fee);
         vm.prank(user);
         IERC20(localNetworkDetails.linkAddress).approve(localNetworkDetails.routerAddress, fee);
@@ -160,7 +151,7 @@ contract CrossChainTest is Test {
         vm.stopPrank();
         assertEq(localBalanceAfter, localBalanceBefore - amountToBridge);
         uint256 localUserInterestRate = IRebaseToken(address(localToken)).getUserInterestRate(user);
-        
+
         vm.selectFork(remoteFork);
         vm.warp(block.timestamp + 20 minutes);
         uint256 remoteBalanceBefore = IERC20(address(remoteToken)).balanceOf(user);
@@ -169,5 +160,33 @@ contract CrossChainTest is Test {
         assertEq(remoteBalanceAfter, remoteBalanceBefore + amountToBridge);
         uint256 remoteUserInterestRate = IRebaseToken(address(remoteToken)).getUserInterestRate(user);
         assertEq(remoteUserInterestRate, localUserInterestRate);
+    }
+
+    function testBridgeAllTokens() public {
+        vm.selectFork(sepoliaFork);
+        vm.deal(user, SEND_VALUE);
+        vm.prank(user);
+        Vault(payable(address(vault))).deposit{value: SEND_VALUE};
+        assertEq(sepoliaToken.balanceOf(user), SEND_VALUE);
+        bridgeTokens(
+            SEND_VALUE,
+            sepoliaFork,
+            arbSepoliaFork,
+            sepoliaNetworkDetails,
+            arbSepoliaNetworkDetails,
+            sepoliaToken,
+            arbSepoliaToken
+        );
+        vm.selectFork(arbSepoliaFork);
+        vm.warp(block.timestamp + 20 minutes);
+        bridgeTokens(
+            arbSepoliaToken.balanceOf(user), 
+            arbSepoliaFork, 
+            sepoliaFork, 
+            arbSepoliaNetworkDetails, 
+            sepoliaNetworkDetails, 
+            arbSepoliaToken, 
+            sepoliaToken
+        );
     }
 }
